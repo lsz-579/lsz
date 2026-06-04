@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图书管理系统</title>
+<style>
+:root {
+  --pri: #2c3e50;
+  --bg: #f5f6fa;
+  --card: #fff;
+  --border: #e2e8f0;
+  --text: #333;
+  --muted: #94a3b8;
+  --success: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --shadow: 0 1px 3px rgba(0,0,0,.08);
+  --radius: 8px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+header{background:var(--pri);color:#fff;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:18px;font-weight:600;}
+.tabs{display:flex;gap:4px;}
+.tab{
+  padding:8px 20px;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);
+  border-radius:6px 6px 0 0;cursor:pointer;font-size:14px;transition:.2s;
+}
+.tab.active,.tab:hover{background:rgba(255,255,255,.25);color:#fff;}
+main{max-width:1200px;margin:0 auto;padding:24px;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.stat{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);}
+.stat-label{font-size:12px;color:var(--muted);margin-bottom:4px;}
+.stat-val{font-size:28px;font-weight:700;color:var(--pri);}
+
+/* Toolbar */
+.toolbar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
+.toolbar input,.toolbar select{
+  padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;
+  outline:none;transition:border-color .2s;
+}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--pri);}
+.toolbar input{width:240px;}
+.toolbar .spacer{flex:1;}
+.btn{
+  padding:8px 16px;border:none;border-radius:6px;font-size:14px;cursor:pointer;
+  font-weight:500;transition:.2s;display:inline-flex;align-items:center;gap:6px;
+}
+.btn-pri{background:var(--pri);color:#fff;}
+.btn-pri:hover{filter:brightness(1.15);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-success:hover{filter:brightness(1.1);}
+.btn-warn{background:var(--warn);color:#fff;}
+.btn-warn:hover{filter:brightness(1.1);}
+.btn-out{background:transparent;color:var(--pri);border:1px solid var(--pri);}
+.btn-out:hover{background:var(--pri);color:#fff;}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-danger:hover{filter:brightness(1.1);}
+
+/* Table */
+.table-wrap{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:12px 16px;text-align:left;border-bottom:1px solid var(--border);font-size:13px;}
+th{background:#f8fafc;font-weight:600;white-space:nowrap;color:#64748b;font-size:12px;text-transform:uppercase;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#f8fafc;}
+.empty{text-align:center;padding:40px;color:var(--muted);}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--card);border-radius:12px;width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);padding:24px;}
+.modal h3{margin-bottom:20px;font-size:16px;}
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#555;}
+.form-group input,.form-group select,.form-group textarea{
+  width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;
+  font-size:14px;outline:none;transition:border-color .2s;
+}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--pri);}
+.form-group textarea{resize:vertical;min-height:60px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+
+.badge{padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;display:inline-block;}
+.badge-available{background:#d1fae5;color:#065f46;}
+.badge-borrowed{background:#fef3c7;color:#92400e;}
+.badge-returned{background:#e2e8f0;color:#475569;}
+
+@media(max-width:768px){
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .toolbar input{width:100%;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>图书管理系统</h1>
+  <div class="tabs">
+    <button class="tab active" data-page="books">图书管理</button>
+    <button class="tab" data-page="borrows">借阅管理</button>
+  </div>
+</header>
+
+<main>
+  <!-- ==================== 图书管理 ==================== -->
+  <section class="page active" id="page-books">
+    <div class="stats" id="book-stats"></div>
+    <div class="toolbar">
+      <input type="text" id="book-search" placeholder="书名 / 作者 / ISBN 搜索...">
+      <select id="book-filter-cat"><option value="">全部分类</option></select>
+      <span class="spacer"></span>
+      <button class="btn btn-pri" onclick="openBookModal()">+ 添加图书</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>编号</th><th>书名</th><th>作者</th><th>ISBN</th><th>分类</th><th>状态</th><th>操作</th></tr>
+        </thead>
+        <tbody id="book-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 借阅管理 ==================== -->
+  <section class="page" id="page-borrows">
+    <div class="stats" id="borrow-stats"></div>
+    <div class="toolbar">
+      <input type="text" id="borrow-search" placeholder="书名 / 借阅人搜索...">
+      <select id="borrow-filter-status">
+        <option value="">全部状态</option>
+        <option value="borrowed">借出中</option>
+        <option value="returned">已归还</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="btn btn-pri" onclick="openBorrowModal()">+ 借阅登记</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>编号</th><th>书名</th><th>借阅人</th><th>借阅日期</th><th>应还日期</th><th>归还日期</th><th>状态</th><th>操作</th></tr>
+        </thead>
+        <tbody id="borrow-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- 图书表单弹窗 -->
+<div class="modal-overlay" id="book-modal-overlay">
+  <div class="modal" id="book-modal">
+    <h3 id="book-modal-title">添加图书</h3>
+    <div class="form-group"><label>书名 *</label><input id="f-title"></div>
+    <div class="form-group"><label>作者 *</label><input id="f-author"></div>
+    <div class="form-group"><label>ISBN</label><input id="f-isbn"></div>
+    <div class="form-group"><label>分类</label>
+      <select id="f-category">
+        <option value="文学">文学</option><option value="科技">科技</option>
+        <option value="历史">历史</option><option value="哲学">哲学</option>
+        <option value="经济">经济</option><option value="教育">教育</option>
+        <option value="艺术">艺术</option><option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="form-group"><label>简介</label><textarea id="f-desc"></textarea></div>
+    <input type="hidden" id="f-id">
+    <div class="modal-actions">
+      <button class="btn btn-out" onclick="closeBookModal()">取消</button>
+      <button class="btn btn-pri" onclick="saveBook()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 借阅表单弹窗 -->
+<div class="modal-overlay" id="borrow-modal-overlay">
+  <div class="modal" id="borrow-modal">
+    <h3>借阅登记</h3>
+    <div class="form-group"><label>图书 *</label>
+      <select id="f-borrow-book"></select>
+    </div>
+    <div class="form-group"><label>借阅人 *</label><input id="f-borrower"></div>
+    <div class="form-group"><label>借阅日期</label><input type="date" id="f-borrow-date"></div>
+    <div class="form-group"><label>应还日期</label><input type="date" id="f-due-date"></div>
+    <div class="modal-actions">
+      <button class="btn btn-out" onclick="closeBorrowModal()">取消</button>
+      <button class="btn btn-pri" onclick="saveBorrow()">登记</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BOOKS_KEY = 'lib_books';
+const BORROWS_KEY = 'lib_borrows';
+
+function $(sel){return document.querySelector(sel);}
+function $$(sel){return document.querySelectorAll(sel);}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function fmt(d){if(!d)return'-';const dt=new Date(d);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');}
+
+function load(key){try{return JSON.parse(localStorage.getItem(key)||'[]');}catch(e){return[];}}
+function save(key,data){localStorage.setItem(key,JSON.stringify(data));}
+
+// ===================== 图书管理 =====================
+function getBooks(){return load(BOOKS_KEY);}
+function saveBooks(data){save(BOOKS_KEY,data);renderBooks();}
+
+function renderBooks(){
+  const books=getBooks();
+  let list=books;
+  const q=$('#book-search').value.trim().toLowerCase();
+  const cat=$('#book-filter-cat').value;
+  if(q) list=list.filter(b=>(b.title||'').toLowerCase().includes(q)||(b.author||'').toLowerCase().includes(q)||(b.isbn||'').toLowerCase().includes(q));
+  if(cat) list=list.filter(b=>b.category===cat);
+
+  // stats
+  const total=books.length;
+  const available=books.filter(b=>b.status!=='borrowed').length;
+  const borrowed=books.filter(b=>b.status==='borrowed').length;
+  const cats=new Set(books.map(b=>b.category).filter(Boolean)).size;
+  $('#book-stats').innerHTML=
+    `<div class="stat"><div class="stat-label">馆藏总数</div><div class="stat-val">${total}</div></div>`+
+    `<div class="stat"><div class="stat-label">可借阅</div><div class="stat-val">${available}</div></div>`+
+    `<div class="stat"><div class="stat-label">已借出</div><div class="stat-val">${borrowed}</div></div>`+
+    `<div class="stat"><div class="stat-label">分类数</div><div class="stat-val">${cats}</div></div>`;
+
+  // categories
+  const allCats=[...new Set(books.map(b=>b.category).filter(Boolean))];
+  $('#book-filter-cat').innerHTML='<option value="">全部分类</option>'+allCats.map(c=>`<option value="${c}">${c}</option>`).join('');
+
+  // table
+  const tbody=$('#book-tbody');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="7" class="empty">暂无图书数据</td></tr>';return;}
+  tbody.innerHTML=list.map(b=>`
+    <tr>
+      <td>${b.code||'-'}</td>
+      <td><strong>${esc(b.title)}</strong></td>
+      <td>${esc(b.author)||'-'}</td>
+      <td>${esc(b.isbn)||'-'}</td>
+      <td>${esc(b.category)||'-'}</td>
+      <td><span class="badge ${b.status==='borrowed'?'badge-borrowed':'badge-available'}">${b.status==='borrowed'?'借出中':'可借阅'}</span></td>
+      <td>
+        <button class="btn btn-out btn-sm" onclick="openBookModal('${b.id}')">编辑</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteBook('${b.id}')">删除</button>
+      </td>
+    </tr>`).join('');
+}
+
+function esc(s){const el=document.createElement('span');el.textContent=s||'';return el.innerHTML;}
+
+function openBookModal(id){
+  const books=getBooks();
+  if(id){
+    const b=books.find(x=>x.id===id);if(!b)return;
+    $('#book-modal-title').textContent='编辑图书';
+    $('#f-id').value=b.id;$('#f-title').value=b.title||'';
+    $('#f-author').value=b.author||'';$('#f-isbn').value=b.isbn||'';
+    $('#f-category').value=b.category||'其他';$('#f-desc').value=b.desc||'';
+  }else{
+    $('#book-modal-title').textContent='添加图书';
+    $('#f-id').value='';$('#f-title').value='';$('#f-author').value='';
+    $('#f-isbn').value='';$('#f-category').value='文学';$('#f-desc').value='';
+  }
+  $('#book-modal-overlay').classList.add('show');
+}
+function closeBookModal(){$('#book-modal-overlay').classList.remove('show');}
+
+function saveBook(){
+  const id=$('#f-id').value;
+  const title=$('#f-title').value.trim();
+  const author=$('#f-author').value.trim();
+  if(!title||!author)return alert('书名和作者为必填项');
+  const books=getBooks();
+  const isbn=$('#f-isbn').value.trim();
+  const category=$('#f-category').value;
+  const desc=$('#f-desc').value.trim();
+  if(id){
+    const idx=books.findIndex(b=>b.id===id);
+    if(idx!==-1){books[idx]={...books[idx],title,author,isbn,category,desc};}
+  }else{
+    books.push({
+      id:uid(),code:'B'+String(books.length+1).padStart(4,'0'),
+      title,author,isbn,category,desc,status:'available',createdAt:new Date().toISOString()
+    });
+  }
+  saveBooks(books);
+  closeBookModal();
+}
+
+function deleteBook(id){
+  if(!confirm('确定删除该图书吗？'))return;
+  const books=getBooks().filter(b=>b.id!==id);
+  saveBooks(books);
+}
+
+// ===================== 借阅管理 =====================
+function getBorrows(){return load(BORROWS_KEY);}
+function saveBorrows(data){save(BORROWS_KEY,data);renderBorrows();}
+
+function renderBorrows(){
+  const borrows=getBorrows();
+  const books=getBooks();
+  let list=borrows;
+  const q=$('#borrow-search').value.trim().toLowerCase();
+  const st=$('#borrow-filter-status').value;
+  if(q) list=list.filter(r=>{
+    const bk=books.find(b=>b.id===r.bookId);
+    return (bk?bk.title:'').toLowerCase().includes(q)||(r.borrower||'').toLowerCase().includes(q);
+  });
+  if(st) list=list.filter(r=>r.status===st);
+
+  // stats
+  const total=borrows.length;
+  const active=borrows.filter(r=>r.status==='borrowed').length;
+  const ret=borrows.filter(r=>r.status==='returned').length;
+  const overdue=borrows.filter(r=>r.status==='borrowed'&&r.dueDate&&new Date(r.dueDate)<new Date()).length;
+  $('#borrow-stats').innerHTML=
+    `<div class="stat"><div class="stat-label">借阅总数</div><div class="stat-val">${total}</div></div>`+
+    `<div class="stat"><div class="stat-label">借出中</div><div class="stat-val">${active}</div></div>`+
+    `<div class="stat"><div class="stat-label">已归还</div><div class="stat-val">${ret}</div></div>`+
+    `<div class="stat"><div class="stat-label">逾期未还</div><div class="stat-val" style="color:${overdue?'var(--danger)':'var(--pri)'}">${overdue}</div></div>`;
+
+  // table
+  const tbody=$('#borrow-tbody');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="8" class="empty">暂无借阅记录</td></tr>';return;}
+  tbody.innerHTML=list.map(r=>{
+    const bk=books.find(b=>b.id===r.bookId);
+    const now=new Date();
+    const isOverdue=r.status==='borrowed'&&r.dueDate&&new Date(r.dueDate)<now;
+    let stHtml='';
+    if(r.status==='returned') stHtml='<span class="badge badge-returned">已归还</span>';
+    else if(isOverdue) stHtml='<span class="badge" style="background:#fee2e2;color:#991b1b;">逾期</span>';
+    else stHtml='<span class="badge badge-borrowed">借出中</span>';
+
+    return `<tr>
+      <td>${r.code||'-'}</td>
+      <td><strong>${bk?esc(bk.title):'(已删除)'}</strong></td>
+      <td>${esc(r.borrower)||'-'}</td>
+      <td>${fmt(r.borrowDate)}</td>
+      <td>${fmt(r.dueDate)}</td>
+      <td>${fmt(r.returnDate)}</td>
+      <td>${stHtml}</td>
+      <td>
+        ${r.status==='borrowed'?`<button class="btn btn-success btn-sm" onclick="returnBook('${r.id}')">归还</button>`:''}
+        <button class="btn btn-danger btn-sm" onclick="deleteBorrow('${r.id}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openBorrowModal(){
+  const books=getBooks();
+  const avail=books.filter(b=>b.status!=='borrowed');
+  if(!avail.length){alert('暂无可借阅的图书！');return;}
+  $('#f-borrow-book').innerHTML=avail.map(b=>`<option value="${b.id}">${esc(b.title)} (${esc(b.author)})</option>`).join('');
+  $('#f-borrower').value='';
+  const now=new Date().toISOString().slice(0,10);
+  $('#f-borrow-date').value=now;
+  // 默认应还日期 = 30天后
+  const due=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+  $('#f-due-date').value=due;
+  $('#borrow-modal-overlay').classList.add('show');
+}
+function closeBorrowModal(){$('#borrow-modal-overlay').classList.remove('show');}
+
+function saveBorrow(){
+  const bookId=$('#f-borrow-book').value;
+  const borrower=$('#f-borrower').value.trim();
+  if(!bookId||!borrower)return alert('请选择图书并填写借阅人');
+  const borrows=getBorrows();
+  const books=getBooks();
+  borrows.push({
+    id:uid(),code:'R'+String(borrows.length+1).padStart(4,'0'),
+    bookId,borrower,borrowDate:$('#f-borrow-date').value,
+    dueDate:$('#f-due-date').value,returnDate:null,status:'borrowed',
+    createdAt:new Date().toISOString()
+  });
+  // 更新图书状态
+  const bi=books.findIndex(b=>b.id===bookId);
+  if(bi!==-1)books[bi].status='borrowed';
+  save(BORROWS_KEY,borrows);
+  save(BOOKS_KEY,books);
+  closeBorrowModal();
+  renderBooks();
+  renderBorrows();
+}
+
+function returnBook(id){
+  if(!confirm('确认归还该书吗？'))return;
+  const borrows=getBorrows();
+  const r=borrows.find(x=>x.id===id);
+  if(!r)return;
+  r.status='returned';
+  r.returnDate=new Date().toISOString().slice(0,10);
+  saveBorrows(borrows);
+  // 恢复图书状态
+  const books=getBooks();
+  const bi=books.findIndex(b=>b.id===r.bookId);
+  if(bi!==-1)books[bi].status='available';
+  saveBooks(books);
+}
+
+function deleteBorrow(id){
+  if(!confirm('确定删除该借阅记录吗？'))return;
+  const borrows=getBorrows();
+  const r=borrows.find(x=>x.id===id);
+  // 如果记录是借出中，恢复图书状态
+  if(r&&r.status==='borrowed'){
+    const books=getBooks();
+    const bi=books.findIndex(b=>b.id===r.bookId);
+    if(bi!==-1)books[bi].status='available';
+    saveBooks(books);
+  }
+  saveBorrows(borrows.filter(x=>x.id!==id));
+}
+
+// ===================== 标签切换 =====================
+$$('.tab').forEach(t=>t.addEventListener('click',function(){
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  this.classList.add('active');
+  $$('.page').forEach(x=>x.classList.remove('active'));
+  $('#page-'+this.dataset.page).classList.add('active');
+}));
+
+// 搜索实时过滤
+$('#book-search').addEventListener('input',renderBooks);
+$('#book-filter-cat').addEventListener('change',renderBooks);
+$('#borrow-search').addEventListener('input',renderBorrows);
+$('#borrow-filter-status').addEventListener('change',renderBorrows);
+
+// 点击遮罩关闭弹窗
+$$('.modal-overlay').forEach(o=>o.addEventListener('click',function(e){
+  if(e.target===this){this.classList.remove('show');}
+}));
+
+// 初始化
+renderBooks();
+renderBorrows();
+</script>
+</body>
+</html>
