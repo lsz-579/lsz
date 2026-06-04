@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>图书管理系统</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+  <script src="https://unpkg.com/vue@2.7.16/dist/vue.js"></script>
+  <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+  <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .el-header { background: #409EFF !important; display: flex; align-items: center; padding: 0 20px !important; }
+    .el-header h2 { color: white; margin: 0; font-size: 20px; }
+    .nav-links { margin-left: 40px; display: flex; gap: 5px; }
+    .nav-links a { color: white; text-decoration: none; padding: 0 20px; height: 60px; line-height: 60px; border-bottom: 2px solid transparent; }
+    .nav-links a.active { border-bottom-color: #ffd04b; color: #ffd04b; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <el-container style="height: 100vh">
+    <el-header>
+      <h2>图书管理系统</h2>
+      <div class="nav-links">
+        <a href="#" :class="{ active: page === 'books' }" @click.prevent="page='books'">图书管理</a>
+        <a href="#" :class="{ active: page === 'stats' }" @click.prevent="page='stats'">查询统计</a>
+      </div>
+    </el-header>
+    <el-main style="background: #f5f7fa; padding: 20px">
+
+      <!-- ==================== 图书管理页 ==================== -->
+      <div v-show="page === 'books'">
+        <!-- 搜索 -->
+        <el-card style="margin-bottom: 20px">
+          <el-form :inline="true" :model="query" size="small">
+            <el-form-item label="书名">
+              <el-input v-model="query.title" placeholder="请输入书名" clearable />
+            </el-form-item>
+            <el-form-item label="作者">
+              <el-input v-model="query.author" placeholder="请输入作者" clearable />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-select v-model="query.category" placeholder="请选择" clearable>
+                <el-option label="文学" value="文学" />
+                <el-option label="科幻" value="科幻" />
+                <el-option label="技术" value="技术" />
+                <el-option label="历史" value="历史" />
+                <el-option label="哲学" value="哲学" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="search">查询</el-button>
+              <el-button @click="reset">重置</el-button>
+            </el-form-item>
+          </el-form>
+        </el-card>
+
+        <!-- 表格 -->
+        <el-card>
+          <div style="margin-bottom: 15px">
+            <el-button type="primary" size="small" @click="openDialog()">新增图书</el-button>
+          </div>
+          <el-table :data="pagedBooks" border stripe style="width: 100%">
+            <el-table-column prop="id" label="ID" width="60" />
+            <el-table-column prop="title" label="书名" min-width="160" />
+            <el-table-column prop="author" label="作者" width="130" />
+            <el-table-column prop="isbn" label="ISBN" width="150" />
+            <el-table-column prop="category" label="分类" width="80" />
+            <el-table-column prop="publisher" label="出版社" min-width="160" />
+            <el-table-column prop="publishDate" label="出版日期" width="110" />
+            <el-table-column label="操作" width="140" fixed="right">
+              <template slot-scope="s">
+                <el-button type="text" size="small" @click="openDialog(s.row)">编辑</el-button>
+                <el-button type="text" size="small" style="color:#F56C6C" @click="del(s.row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div style="margin-top: 15px; text-align: right">
+            <el-pagination background layout="total, prev, pager, next"
+              :total="filteredBooks.length" :page-size="pageSize" :current-page.sync="currentPage" />
+          </div>
+        </el-card>
+
+        <!-- 新增/编辑对话框 -->
+        <el-dialog :title="editingId ? '编辑图书' : '新增图书'" :visible.sync="dialogVisible" width="520px" @closed="resetForm">
+          <el-form :model="form" :rules="rules" ref="bookForm" label-width="80px" size="small">
+            <el-form-item label="书名" prop="title">
+              <el-input v-model="form.title" placeholder="请输入书名" />
+            </el-form-item>
+            <el-form-item label="作者" prop="author">
+              <el-input v-model="form.author" placeholder="请输入作者" />
+            </el-form-item>
+            <el-form-item label="ISBN">
+              <el-input v-model="form.isbn" placeholder="请输入ISBN" />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-select v-model="form.category" placeholder="请选择分类" style="width:100%">
+                <el-option label="文学" value="文学" />
+                <el-option label="科幻" value="科幻" />
+                <el-option label="技术" value="技术" />
+                <el-option label="历史" value="历史" />
+                <el-option label="哲学" value="哲学" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="出版社">
+              <el-input v-model="form.publisher" placeholder="请输入出版社" />
+            </el-form-item>
+            <el-form-item label="出版日期">
+              <el-date-picker v-model="form.publishDate" type="date" placeholder="选择日期" style="width:100%" value-format="yyyy-MM-dd" />
+            </el-form-item>
+            <el-form-item label="简介">
+              <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入简介" />
+            </el-form-item>
+          </el-form>
+          <div slot="footer">
+            <el-button size="small" @click="dialogVisible = false">取消</el-button>
+            <el-button size="small" type="primary" @click="submit">确定</el-button>
+          </div>
+        </el-dialog>
+      </div>
+
+      <!-- ==================== 查询统计页 ==================== -->
+      <div v-show="page === 'stats'">
+        <el-row :gutter="20" style="margin-bottom:20px">
+          <el-col :span="8">
+            <el-card><div style="text-align:center">
+              <div style="font-size:14px;color:#909399">藏书总数</div>
+              <div style="font-size:36px;color:#409EFF;font-weight:bold;margin:10px 0">{{ stats.totalBooks }}</div>
+            </div></el-card>
+          </el-col>
+          <el-col :span="8">
+            <el-card><div style="text-align:center">
+              <div style="font-size:14px;color:#909399">借阅总次数</div>
+              <div style="font-size:36px;color:#67C23A;font-weight:bold;margin:10px 0">{{ stats.totalBorrows }}</div>
+            </div></el-card>
+          </el-col>
+          <el-col :span="8">
+            <el-card><div style="text-align:center">
+              <div style="font-size:14px;color:#909399">当前在借</div>
+              <div style="font-size:36px;color:#E6A23C;font-weight:bold;margin:10px 0">{{ stats.activeBorrows }}</div>
+            </div></el-card>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-card>
+              <div slot="header" style="font-weight:bold">图书分类分布</div>
+              <div ref="categoryChart" style="height:350px"></div>
+            </el-card>
+          </el-col>
+          <el-col :span="12">
+            <el-card>
+              <div slot="header" style="font-weight:bold">热门借阅排行</div>
+              <div ref="topChart" style="height:350px"></div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </div>
+
+    </el-main>
+  </el-container>
+</div>
+
+<script>
+// ---------- Mock 数据 ----------
+var initialBooks = [
+  { id:1, title:'平凡的世界', author:'路遥', isbn:'9787530212004', category:'文学', publisher:'北京十月文艺出版社', publishDate:'2012-03-01', description:'以中国70年代中期到80年代中期为背景，刻画了当时社会各阶层众多普通人的形象。' },
+  { id:2, title:'活着', author:'余华', isbn:'9787530215531', category:'文学', publisher:'北京十月文艺出版社', publishDate:'2017-06-01', description:'讲述了农村人福贵悲惨的人生遭遇。' },
+  { id:3, title:'三体', author:'刘慈欣', isbn:'9787536692930', category:'科幻', publisher:'重庆出版社', publishDate:'2008-01-01', description:'讲述了地球人类文明和三体文明的信息交流、生死搏杀及两个文明在宇宙中的兴衰历程。' },
+  { id:4, title:'百年孤独', author:'加西亚·马尔克斯', isbn:'9787544253994', category:'文学', publisher:'南海出版公司', publishDate:'2011-06-01', description:'描写了布恩迪亚家族七代人的传奇故事。' },
+  { id:5, title:'深入理解Java虚拟机', author:'周志明', isbn:'9787111421900', category:'技术', publisher:'机械工业出版社', publishDate:'2013-06-01', description:'以Java虚拟机为核心，系统讲解JVM工作原理和优化实践。' },
+  { id:6, title:'红楼梦', author:'曹雪芹', isbn:'9787020002207', category:'文学', publisher:'人民文学出版社', publishDate:'1996-12-01', description:'中国古典四大名著之首。' },
+  { id:7, title:'时间简史', author:'史蒂芬·霍金', isbn:'9787535732309', category:'科普', publisher:'湖南科学技术出版社', publishDate:'2001-10-01', description:'讲述关于宇宙本性的最前沿知识。' },
+  { id:8, title:'算法导论', author:'Thomas H.Cormen', isbn:'9787111407010', category:'技术', publisher:'机械工业出版社', publishDate:'2012-12-01', description:'计算机算法的经典教材。' }
+];
+
+var borrowRecords = [
+  { bookId:1, borrower:'张三', borrowDate:'2024-01-15', returnDate:'2024-02-15', status:1 },
+  { bookId:1, borrower:'李四', borrowDate:'2024-03-01', returnDate:null, status:0 },
+  { bookId:2, borrower:'王五', borrowDate:'2024-01-20', returnDate:'2024-02-20', status:1 },
+  { bookId:2, borrower:'张三', borrowDate:'2024-04-10', returnDate:null, status:0 },
+  { bookId:3, borrower:'李四', borrowDate:'2024-02-01', returnDate:'2024-03-01', status:1 },
+  { bookId:4, borrower:'赵六', borrowDate:'2024-05-01', returnDate:null, status:0 },
+  { bookId:5, borrower:'王五', borrowDate:'2024-03-15', returnDate:'2024-04-15', status:1 },
+  { bookId:3, borrower:'张三', borrowDate:'2024-06-01', returnDate:null, status:0 }
+];
+
+// ---------- Vue ----------
+new Vue({
+  el: '#app',
+  data: function() {
+    return {
+      page: 'books',
+      // 图书管理
+      books: JSON.parse(JSON.stringify(initialBooks)),
+      nextId: 9,
+      query: { title:'', author:'', category:'' },
+      currentPage: 1,
+      pageSize: 5,
+      dialogVisible: false,
+      editingId: null,
+      form: { title:'', author:'', isbn:'', category:'', publisher:'', publishDate:null, description:'' },
+      rules: {
+        title: [{ required: true, message: '请输入书名', trigger: 'blur' }],
+        author: [{ required: true, message: '请输入作者', trigger: 'blur' }]
+      },
+      // 统计
+      borrows: JSON.parse(JSON.stringify(borrowRecords)),
+      categoryChart: null,
+      topChart: null
+    };
+  },
+  computed: {
+    filteredBooks: function() {
+      var q = this.query;
+      return this.books.filter(function(b) {
+        return (!q.title || b.title.indexOf(q.title) >= 0)
+          && (!q.author || b.author.indexOf(q.author) >= 0)
+          && (!q.category || b.category === q.category);
+      });
+    },
+    pagedBooks: function() {
+      var start = (this.currentPage - 1) * this.pageSize;
+      return this.filteredBooks.slice(start, start + this.pageSize);
+    },
+    stats: function() {
+      var borrows = this.borrows;
+      // 分类分布
+      var catMap = {};
+      this.books.forEach(function(b) {
+        var c = b.category || '未分类';
+        catMap[c] = (catMap[c] || 0) + 1;
+      });
+      var catDist = Object.keys(catMap).map(function(k) {
+        return { name: k, value: catMap[k] };
+      });
+      // 热门借阅
+      var countMap = {};
+      borrows.forEach(function(r) {
+        countMap[r.bookId] = (countMap[r.bookId] || 0) + 1;
+      });
+      var topBooks = [];
+      this.books.forEach(function(b) {
+        if (countMap[b.id]) {
+          topBooks.push({ title: b.title, author: b.author, borrowCount: countMap[b.id] });
+        }
+      });
+      topBooks.sort(function(a, b) { return b.borrowCount - a.borrowCount; });
+      return {
+        totalBooks: this.books.length,
+        totalBorrows: borrows.length,
+        activeBorrows: borrows.filter(function(r) { return r.status === 0; }).length,
+        categoryDistribution: catDist,
+        topBorrowedBooks: topBooks.slice(0, 10)
+      };
+    }
+  },
+  methods: {
+    search: function() { this.currentPage = 1; },
+    reset: function() { this.query = { title:'', author:'', category:'' }; this.currentPage = 1; },
+    openDialog: function(row) {
+      if (row) {
+        this.editingId = row.id;
+        this.form = JSON.parse(JSON.stringify(row));
+      } else {
+        this.editingId = null;
+        this.form = { title:'', author:'', isbn:'', category:'', publisher:'', publishDate:null, description:'' };
+      }
+      this.dialogVisible = true;
+    },
+    resetForm: function() {
+      this.form = { title:'', author:'', isbn:'', category:'', publisher:'', publishDate:null, description:'' };
+      if (this.$refs.bookForm) this.$refs.bookForm.clearValidate();
+    },
+    submit: function() {
+      var self = this;
+      this.$refs.bookForm.validate(function(valid) {
+        if (!valid) return;
+        if (self.editingId) {
+          var idx = self.books.findIndex(function(b) { return b.id === self.editingId; });
+          if (idx >= 0) { self.books.splice(idx, 1, Object.assign({}, self.form)); }
+          self.$message.success('修改成功');
+        } else {
+          self.form.id = self.nextId++;
+          self.books.push(Object.assign({}, self.form));
+          self.$message.success('新增成功');
+        }
+        self.dialogVisible = false;
+      });
+    },
+    del: function(row) {
+      var self = this;
+      this.$confirm('确定要删除《' + row.title + '》吗？', '提示', { type: 'warning' }).then(function() {
+        var idx = self.books.findIndex(function(b) { return b.id === row.id; });
+        if (idx >= 0) self.books.splice(idx, 1);
+        self.$message.success('删除成功');
+      }).catch(function() {});
+    },
+    renderCharts: function() {
+      var self = this;
+      this.$nextTick(function() {
+        // 分类饼图
+        var catDom = self.$refs.categoryChart;
+        if (!catDom) return;
+        if (self.categoryChart) self.categoryChart.dispose();
+        self.categoryChart = echarts.init(catDom);
+        self.categoryChart.setOption({
+          tooltip: { trigger: 'item' },
+          series: [{
+            type: 'pie', radius: ['45%', '70%'],
+            data: self.stats.categoryDistribution,
+            label: { show: true, formatter: '{b}: {c}' }
+          }],
+          color: ['#409EFF','#67C23A','#E6A23C','#F56C6C','#909399']
+        });
+        // 热门借阅柱状图
+        var topDom = self.$refs.topChart;
+        if (self.topChart) self.topChart.dispose();
+        self.topChart = echarts.init(topDom);
+        var data = self.stats.topBorrowedBooks.slice().reverse();
+        self.topChart.setOption({
+          tooltip: { trigger: 'axis' },
+          grid: { left:'3%', right:'10%', bottom:'3%', containLabel:true },
+          xAxis: { type:'value', name:'借阅次数' },
+          yAxis: { type:'category', data: data.map(function(d) { return d.title; }) },
+          series: [{ type:'bar', data: data.map(function(d) { return d.borrowCount; }), itemStyle:{ color:'#409EFF' } }]
+        });
+      });
+    }
+  },
+  watch: {
+    page: function(val) {
+      if (val === 'stats') this.renderCharts();
+    }
+  },
+  mounted: function() {
+    if (this.page === 'stats') this.renderCharts();
+  }
+});
+</script>
+</body>
+</html>
